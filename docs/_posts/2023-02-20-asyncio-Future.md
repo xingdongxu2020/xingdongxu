@@ -1,12 +1,13 @@
 ---
-title:  "asyncio Futures"
+title:  "Python异步（一） asyncio Futures"
 ---
 
-# asyncion.Future
+# Future概述
 
 类Future, 是连接底层回调式(low-level callback-based)代码和上层异步/等待(high-level async/await)代码.
 
 注: 在futures.py中
+
 ```python
 try:
     import _asyncio
@@ -17,8 +18,6 @@ else:
     Future = _CFuture = _asyncio.Future
 ```
 
-## Future概述
-
 > PEP 3156
 
 在asyncio中的`Future`类型有意与`concurrent.futures.Future`(PEP 3148)类型尽量相似, 但两者有所不同。
@@ -26,20 +25,19 @@ else:
 asyncion中`Future`接口方法:
 
 - 状态
-  - `cancelled()`
-  - `done()`
-  - `result()`: 1)返回set_result()结果; 2)引起set_exception()异常; 3)被取消时,引起CaneclledError; 4)尚未结束时,引起其它异常.
-  - `exception()`: 1)set_result()时,返回None; 2)返回set_exception()异常; 3)被取消时,引起CaneclledError; 4)尚未结束时,引起其它异常.
+    - `cancelled()`
+    - `done()`
+    - `result()`: 1)返回set_result()结果; 2)引起set_exception()异常; 3)被取消时,引起CaneclledError; 4)尚未结束时,引起其它异常.
+    - `exception()`: 1)set_result()时,返回None; 2)返回set_exception()异常; 3)被取消时,引起CaneclledError; 4)尚未结束时,引起其它异常.
 
 - 自定义回调关系<sup>[1]</sup>
-  - `add_done_callback(fn)`
-  - `remove_done_callback(fn)`
+    - `add_done_callback(fn)`
+    - `remove_done_callback(fn)`
 
 - 驱动Future回调
-  - `cancel()`当Future已经结束/取消时, 立即返回False; 此外, 尝试(Task可能对取消有额外处理)取消Future并返回True。
-  - `set_result(result)`:
-  - `set_exception(exception)`
-
+    - `cancel()`当Future已经结束/取消时, 立即返回False; 此外, 尝试(Task可能对取消有额外处理)取消Future并返回True。
+    - `set_result(result)`:
+    - `set_exception(exception)`
 
 > 注[1]: 回调`fn`将以Future对象为参数进行回调, 即`fn(self)`
 
@@ -49,9 +47,7 @@ asyncion中`Future`接口方法:
 
 `Future`约等于(回调函数)+(状态管理)。`Future`本身不能实现异步功能。(实际的异步回调逻辑由`EventLoop`完成)
 
-
-
-## Future代码研究
+# Future代码研究
 
 > asyncio.futures.Future
 
@@ -59,7 +55,7 @@ asyncion中`Future`接口方法:
 
 ```python
 class Future:
-    _state = _PENDING   # _PENDING, _CANCELLED, _FINISHED
+    _state = _PENDING  # _PENDING, _CANCELLED, _FINISHED
 
     _asyncio_future_blocking = False
 
@@ -134,11 +130,9 @@ class Future:
         ...
 ```
 
+# await 语句 (从Generator至await语法的变化)
 
-
-## await 语句 (从Generator至await语法的变化)
-
-### PEP 255-SimpleGenerators 关键字yield (2001-05)
+## PEP 255-SimpleGenerators 关键字yield (2001-05)
 
 ```python
 def g():
@@ -146,23 +140,24 @@ def g():
     yield i
     i += 1
 
-a = g()		# a is a generator
-next(a)		# out 1
-next(a)		# raise StopIteration
+
+a = g()  # a is a generator
+next(a)  # out 1
+next(a)  # raise StopIteration
 ```
 
 - 首次调用函数返回的是`Generator g`对象
 - 使用`next(g)`时. (此时, `a.next()`语句似乎时允许的, 现在已经不允许了)
-  - 运行至`yield x`语句时, `return x`
-  - 运行函数结尾时, `raise StopIteration`
+    - 运行至`yield x`语句时, `return x`
+    - 运行函数结尾时, `raise StopIteration`
 
-### PEP 342 – Coroutines via Enhanced Generators (2005-05)
+## PEP 342 – Coroutines via Enhanced Generators (2005-05)
 
 > [PEP 342](https://peps.python.org/pep-0342/):
 >
 > 协程是表达许多算法的自然方式，例如模拟、游戏、异步 I/O 和其他形式的事件驱动编程或协作式多任务处理。 Python的生成器函数几乎是协程——但不完全是——因为它们允许暂停执行以产生一个值，但不提供在执行恢复时传入的值或异常。它们也不允许在 try/finally 块的 try 部分暂停执行，因此使中止的协同程序难以自行清理
 
-此时，generators尚存在的问题: 
+此时，generators尚存在的问题:
 
 - `yield`语句虽然可以实现暂停、实现向外传值, 但无法接收外部的新值. 另外, 无法在`try/finally`语句中执行
 - `yield`无法穿过非generator的普通函数向上传递, 即使将嵌套的所有函数均以`yield`语句定义为generator, 上层函数也无法将值/异常直接传递给里层`yield`语句, 必须经过外层`yield`语句的处理判断。
@@ -171,16 +166,14 @@ next(a)		# raise StopIteration
 
 - `yield`扩展为表达式, 而不仅仅是一个声明. (为`yield`语句增加返回值)
 - 为generator增加`send(value=None)`方法
-  - 首次调用`send()`数值必须时`None`表示生成器的首次启动
-  - 后续调用`send()`数值可以为任意值, 作为`yield`语句的返回值
+    - 首次调用`send()`数值必须时`None`表示生成器的首次启动
+    - 后续调用`send()`数值可以为任意值, 作为`yield`语句的返回值
 - 为generator增加`throw(type,value=None,tb=None)`方法, 将在`yield`语句处引发异常`type`
 - 为generator增加`close()`方法, 在`yield`语句中引发`GeneratorExit`异常
-  - 生成器向上抛出`GeneratorExit`等效为`StopIteration`, 均表示生成器已经结束
+    - 生成器向上抛出`GeneratorExit`等效为`StopIteration`, 均表示生成器已经结束
 - 底层支持所有生成器在gc之前`close()`方法会被调用。那么, `yield`语句可用于`try/finally`语句块中, 因为`yield`会被`close()`方法确保执行
 
-
-
-### PEP 380 – Syntax for Delegating to a Subgenerator
+## PEP 380 – Syntax for Delegating to a Subgenerator
 
 > [PEP 380](https://peps.python.org/pep-0380/)
 >
@@ -190,15 +183,10 @@ next(a)		# raise StopIteration
 
 该PEP主要工作，定义`yield from <expr>`表达式语句:
 
-- 表达式`expr`是一个迭代器iterator, 在该语句中将持续迭代直至产生最终结果. 在这个过程中, 如果`expr`内部的`yield`将直接与外层调用函数直接交互, 包含`yield from`语句的生成器(被称为"delegating generator")不参与交互.
+- 表达式`expr`是一个迭代器iterator, 在该语句中将持续迭代直至产生最终结果. 在这个过程中, 如果`expr`内部的`yield`将直接与外层调用函数直接交互, 包含`yield from`语句的生成器(被称为"
+  delegating generator")不参与交互.
 - `expr`的返回值`return value`将作为`yield from <expr>`的返回值
-  - 如果`expr`是一个迭代器, 返回的将是`StopIteration(value)`。 扩展StopIteration以承载返回数据(对于所有迭代器均适用)
-
-
-
-
-
-
+    - 如果`expr`是一个迭代器, 返回的将是`StopIteration(value)`。 扩展StopIteration以承载返回数据(对于所有迭代器均适用)
 
 ```python
 RESULT = yield from EXPR
@@ -245,27 +233,46 @@ else:
 RESULT = _r
 ```
 
+## PEP 492 – Coroutines with async and await syntax（2015-04）
 
 
-### PEP 492 – Coroutines with async and await syntax（2015-04）
+### 废除的 PEP 3152 - Cofunctions (2009-02)
 
 > [PEP 3152 - Cofunctions (2009-02)](https://peps.python.org/pep-3152/)
->
+
+
+目标:
+
+- 直接使用`yield from`调用生成器容易造成各种异常: 1) 目标函数是生成器, 但忘记用`yield from`调用. 2) 使用`yield from`调用的函数中没有`yield`语句
+
+PEP提案
+
+- 关键字`codef`(和`def`相同的使用场景)用于定义cofunction
+- 即使不包含`yield`或`yield from`语句, 函数cofunction也是生成器
+- cofunction不能被一般的函数调用使用, 调用语法是`cocall f(*args, **kw)`语法上等效于`yield from f.__cocall__(*args, *kw)`
+
+
+### PEP 492
 > [PEP 492](https://peps.python.org/pep-0492/)
 
+当下, python可以使用generator实现协程功能(PEP 342, PEP 380), 尚存在如下不足:
 
+1. 协程与普通的生成器不能区分, 容易混淆
+2. 函数是否是生成器取决于函数体中的`yield`/`yield from`语句, 当函数体重构时易导致不确定的错误
+3. 当前的异步调用仅限于`yield`表达式, 无法扩展用于`for`, `with`等语句场景
 
+**PEP 目标:**
 
+为Python新增原生"协程"的语言特性, 与一般生成器区分。
 
+**PEP 工作:**
 
-
-
-
-### PEP 3156 – Asynchronous IO Support Rebooted: the “asyncio” Module(2012-12)
-
-> [PEP 3153 – Asynchronous IO support (2011-05)](https://peps.python.org/pep-3153/)
->
-> [PEP 3156](https://peps.python.org/pep-3156/)
-
-
+1. `async def`定义协程函数
+   - Python内部, `CO_COROUTINE`表示函数时原生协程, `CO_ITERABLE_COROUTINE`表示函数是生成器协程
+   - `StopIteration`异常不表示协程的结束, 将触发`RuntimeError`
+   - 如果原生协程直接被gc, 即没有调用, 将触发`RuntimeWarning`
+2. `await`调用
+   - `await`语句可接收的对象: 1)原生协程, 2)生成器并以`types.corotine()`装饰的协程, 3)定义了`__await__`方法且返回迭代器的对象
+3. `async with`语句对应`__aenter__`, `__aexit__`方法
+4. ``async for`语句对应`__aiter__`, `__anext__`方法，且终止`__anext__`时产生`StopAsyncIteration`异常
 
