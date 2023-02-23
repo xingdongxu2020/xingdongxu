@@ -16,9 +16,29 @@ Python `asyncio`内部的EventLoop机制就是管理callback的调度模型，�
 
 
 
-### 1.1）asyncio EventLoop 方法概述
+## 二、asyncio EventLoop
 
-> [PEP-3156](https://peps.python.org/pep-3156/#event-loop-methods-overview)
+> [PEP-3156](https://peps.python.org/pep-3156/)
+
+### 2.1) EventLoop 框架研究
+
+传统的直线阻塞式I/O操作遵循的步骤是：（1）action: 执行I/O操作->（2）waiting: 循环等待I/O响应结果->（3）callback: 处理结果与后续逻辑。优点是：执行逻辑连贯，I/O操作上下文状态一致。缺点是等待结果的步骤（2）造成程序阻塞。
+
+异步I/O操作依托操作系统的`select/poll`将阻塞步骤（2）交由系统层面处理，应用程序只处理（1）（3）部分逻辑。缺点是：（1）（3）步骤执行逻辑是分离的（即称为“异步I/O”的原因）。
+
+因此，异步I/O框架的实现，重点实现如下需求：
+
+1. 依托操作系统的`select/poll`方法，应用程序不需阻塞等待I/O操作结果
+2. 应用程序程序做好（1）action与（3）callback的关联动作。即开始I/O操作后，要为`select/poll`可能产生的I/O结果做好callback指定
+
+`EventLoop`是位于操作系统`select/poll`与上层应用程序`action/callback`的中间层
+
+- 对于操作系统，`EventLoop`建立I/O，并接收`select/poll`的I/O响应
+- 对于应用程序，`EventLoop`接收应用程序的I/O请求，并调动执行callback
+
+
+
+### 2.2）EventLoop 方法概述
 
 - 启动(starting), 停止(stopping), 关闭(closing): 
   - `run_forever()`
@@ -102,7 +122,7 @@ Python `asyncio`内部的EventLoop机制就是管理callback的调度模型，�
   - `async subprocess_shell()`, 
   - `async subprocess_exec()`
 
-### 1.2）Handle, TimerHandle表示已添加到EventLoop上的callback
+### 2.3）Handle, TimerHandle表示已添加到EventLoop上的callback
 
 **Handle**
 
@@ -128,9 +148,9 @@ Python `asyncio`内部的EventLoop机制就是管理callback的调度模型，�
    - `when()`计划执行时间
 
 
-## 二、实现代码研究
+## 三、实现代码研究
 
-### 2.1）BaseEventLoop(AbstractEventLoop)
+### 3.1）BaseEventLoop(AbstractEventLoop)
 
 #### 运行循环 run_forever()
 
@@ -143,10 +163,10 @@ class BaseEventLoop:
         self._set_coroutine_origin_tracking(self._debug)
         self._thread_id = threading.get_ident()
 
-        # 为当前loop设置异步生成器的firstiter, finalizer
+        # 为当前loop设置异步生成器的firstiter, finalizer, python异步迭代器完备性要求
         old_agen_hooks = sys.get_asyncgen_hooks()
         sys.set_asyncgen_hooks(firstiter=self._asyncgen_firstiter_hook,
-                                finalizer=self._asyncgen_finalizer_hook)
+                               finalizer=self._asyncgen_finalizer_hook)
         try:
             events._set_running_loop(self)
             while True:
@@ -199,7 +219,7 @@ class BaseEventLoop:
             when = self._scheduled[0]._when
             timeout = min(max(0, when - self.time()), MAXIMUM_SELECT_TIMEOUT)
 
-        # _selector留个loop的具体实现定义, select
+        # _selector由loop的具体实现定义, select
         # _process_events同样留给loop的具体实现定义
         event_list = self._selector.select(timeout)
         # select得到的event_list向self._ready添加了相应的callback
@@ -239,6 +259,19 @@ class BaseEventLoop:
         handle = None  # Needed to break cycles when an exception occurs.
 ```
 
+EventLoop每次步进循环中，检查可以执行的callback的Handle对象，来源包括：
+
+1. `call_soon()`直接安排的callback, `Handle`
+   - 由`self._ready`维护，无额外等待，再下次EventLoop步进中按先后顺序执行
+1. `call_at()`,`call_later()`安排的相对时间callback, `TimerHandle`
+   - 由`self._scheduled`列表维护
+   - 相对时间基于EventLoop方法`time()`进行判断。（无需系统select/poll）
+3. 由`self._selector`通过`select/poll`方法检查的已就绪的I/O对应的callback
+   - 可能被安排的callback通过SelectorEventLoop的`add_reader(self, fd, callback, *args)`与`add_writer(self, fd, callback, *args)`方法进行安排
+   - 在文件描述符`fd`每次读/写就绪时，利用`_add_callback()`安排对于`Handle`的回调
+
+
+
 #### 添加callback
 
 call_soon(), call_later(), call_at()
@@ -269,12 +302,21 @@ class BaseEventLoop:
         heapq.heappush(self._scheduled, timer)
         timer._scheduled = True
         return timer
+      
+    def _add_callback(self, handle):
+        """Add a Handle to _scheduled (TimerHandle) or _ready."""
+        assert isinstance(handle, events.Handle), 'A Handle is required here'
+        if handle._cancelled:
+            return
+        assert not isinstance(handle, events.TimerHandle)
+        self._ready.append(handle)
 ```
 
 
 
+### 3.2) SelectorEventLoop(BaseEventLoop)
 
-### 2.2）SelectorEventLoop实现
+**SelectorEventLoop对于`self._selector`的实现**
 
 ```python
 # 处理事件方法
@@ -299,5 +341,91 @@ class BaseSelectorEventLoop(BaseEventLoop):
                     self._remove_writer(fileobj)
                 else:
                     self._add_callback(writer)
+                    
+    def _add_reader(self, fd, callback, *args):
+        self._check_closed()
+        handle = events.Handle(callback, args, self, None)
+        try:
+            key = self._selector.get_key(fd)
+        except KeyError:
+            self._selector.register(fd, selectors.EVENT_READ,
+                                    (handle, None))
+        else:
+            mask, (reader, writer) = key.events, key.data
+            self._selector.modify(fd, mask | selectors.EVENT_READ,
+                                  (handle, writer))
+            if reader is not None:
+                reader.cancel()
+        return handle
+
+    def _remove_reader(self, fd):
+        if self.is_closed():
+            return False
+        try:
+            key = self._selector.get_key(fd)
+        except KeyError:
+            return False
+        else:
+            mask, (reader, writer) = key.events, key.data
+            mask &= ~selectors.EVENT_READ
+            if not mask:
+                self._selector.unregister(fd)
+            else:
+                self._selector.modify(fd, mask, (None, writer))
+
+            if reader is not None:
+                reader.cancel()
+                return True
+            else:
+                return False
+
+    def _add_writer(self, fd, callback, *args):
+        self._check_closed()
+        handle = events.Handle(callback, args, self, None)
+        try:
+            key = self._selector.get_key(fd)
+        except KeyError:
+            self._selector.register(fd, selectors.EVENT_WRITE,
+                                    (None, handle))
+        else:
+            mask, (reader, writer) = key.events, key.data
+            self._selector.modify(fd, mask | selectors.EVENT_WRITE,
+                                  (reader, handle))
+            if writer is not None:
+                writer.cancel()
+        return handle
+
+    def _remove_writer(self, fd):
+        """Remove a writer callback."""
+        if self.is_closed():
+            return False
+        try:
+            key = self._selector.get_key(fd)
+        except KeyError:
+            return False
+        else:
+            mask, (reader, writer) = key.events, key.data
+            # Remove both writer and connector.
+            mask &= ~selectors.EVENT_WRITE
+            if not mask:
+                self._selector.unregister(fd)
+            else:
+                self._selector.modify(fd, mask, (reader, None))
+
+            if writer is not None:
+                writer.cancel()
+                return True
+            else:
+                return False
+
+    def add_reader(self, fd, callback, *args):
+        """Add a reader callback."""
+        self._ensure_fd_no_transport(fd)
+        self._add_reader(fd, callback, *args)
+
+    def add_writer(self, fd, callback, *args):
+        """Add a writer callback.."""
+        self._ensure_fd_no_transport(fd)
+        self._add_writer(fd, callback, *args)
 ```
 
