@@ -265,7 +265,7 @@ async def start_server(client_connected_cb, host=None, port=None, *,
 ```python
 class FlowControlMixin(protocols.Protocol):
     def __init__(self, loop=None):
-          self._loop = loop or events.get_event_loop()
+        self._loop = loop or events.get_event_loop()
         """标识是否暂停"""
         self._paused = False
         self._drain_waiter = None
@@ -277,7 +277,7 @@ class FlowControlMixin(protocols.Protocol):
         self._paused = True
     
     def resume_writing(self):
-          """完成self._drain_waiter的等待"""
+        """完成self._drain_waiter的等待"""
         assert self._paused
         self._paused = False
         
@@ -386,7 +386,8 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
                 
         # 仅对于create_server()模式建立_stream_writer, 执行回调
         if self._client_connected_cb is not None:
-              ...
+            ...
+            pass
 
     def connection_lost(self, exc):
         # 为StreamReader调用 feed_eof() / set_exception() 表示传输终止
