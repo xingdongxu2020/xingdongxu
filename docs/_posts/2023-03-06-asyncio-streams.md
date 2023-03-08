@@ -55,7 +55,6 @@ class Protocol(BaseProtocol):
 ```
 
 
-
 ### 2. 传输端点`asyncio.Transport`
 
 ```python
@@ -89,7 +88,7 @@ class ReadTransport(BaseTransport):
 
     def is_reading(self):
         """表示transport处于receiving."""
-			
+
     def pause_reading(self):
         """暂停接收, 使protocol的data_received()暂时不会被调用"""
 
@@ -133,7 +132,7 @@ class WriteTransport(BaseTransport):
         
         
 class Transport(ReadTransport, WriteTransport):
-	__slots__ = ()
+    __slots__ = ()
 ```
 
 
@@ -153,37 +152,37 @@ class Transport(ReadTransport, WriteTransport):
 
 ```python
 class StreamReader:
-		async def read(self, n=-1):
-				"""至多读n个byte, n=-1表示读至EOF"""
+    async def read(self, n=-1):
+        """至多读n个byte, n=-1表示读至EOF"""
       
     async def readline(self):
-      	"""读至'\n'结尾的bytes"""
+        """读至'\n'结尾的bytes"""
       
     async def readexactly(self, n):
-      	"""精确读n个bytes, 若提前读到EOF, 引发IncompleteReadError"""
+        """精确读n个bytes, 若提前读到EOF, 引发IncompleteReadError"""
       
     async def readuntil(self, separator=b'\n'):
-      	"""从流读至separator字符, 若提前读至EOF, 引发IncompleteReadError"""
+        """从流读至separator字符, 若提前读至EOF, 引发IncompleteReadError"""
         
     def at_eof(self):
-      	"""当缓冲为空且feed_eof()被调用, 则为True"""
+        """当缓冲为空且feed_eof()被调用, 则为True"""
         
-		"""inner methods"""
+    """inner methods"""
     def exception(self):
     
     def set_exception(self, exc):
-      	"""当传输异常终止时被调用. 是Protocol的connection_lost(exc)的响应处理"""
+        """当传输异常终止时被调用. 是Protocol的connection_lost(exc)的响应处理"""
       
     def set_transport(self, transport):
       
     def feed_eof(self):
-      	"""
-      	当传输正常终止时被调用. 是Protocol的connection_lost(exc=None)的响应处理
-      	对Protocol的eof_received()时的响应处理
-      	"""
+        """
+        当传输正常终止时被调用. 是Protocol的connection_lost(exc=None)的响应处理
+        对Protocol的eof_received()时的响应处理
+        """
     
     def feed_data(self, data):
-      	"""对Protocol的data_received()的响应处理"""
+        """对Protocol的data_received()的响应处理"""
 ```
 
 
@@ -196,19 +195,19 @@ class StreamReader:
 
 ```python
 class StreamWriter:
-		def write(data):
+    def write(data):
       
     def writelines(data):
       
     def close():
-      	# 应当随后调用wait_closed()
+        # 应当随后调用wait_closed()
 
     def can_write_eof():
       
     def write_eof():
       
     async def drain():
-      	"""用于流控制"""
+        """用于流控制"""
       
     def is_closing():
       
@@ -266,7 +265,7 @@ async def start_server(client_connected_cb, host=None, port=None, *,
 ```python
 class FlowControlMixin(protocols.Protocol):
     def __init__(self, loop=None):
-      	self._loop = loop or events.get_event_loop()
+          self._loop = loop or events.get_event_loop()
         """标识是否暂停"""
         self._paused = False
         self._drain_waiter = None
@@ -278,7 +277,7 @@ class FlowControlMixin(protocols.Protocol):
         self._paused = True
     
     def resume_writing(self):
-	      """完成self._drain_waiter的等待"""
+          """完成self._drain_waiter的等待"""
         assert self._paused
         self._paused = False
         
@@ -288,8 +287,8 @@ class FlowControlMixin(protocols.Protocol):
             if not waiter.done():
                 waiter.set_result(None)
                 
-		def connection_lost(self, exc):
-       	"""因为丢失连接, 与resume_writing相同完成self._drain_waiter等待"""
+    def connection_lost(self, exc):
+        """因为丢失连接, 与resume_writing相同完成self._drain_waiter等待"""
         self._connection_lost = True
         # Wake up the writer if currently paused.
         if not self._paused:
@@ -305,12 +304,12 @@ class FlowControlMixin(protocols.Protocol):
         else:
             waiter.set_exception(exc)
             
-		async def _drain_helper(self):
-	      """等待self._drain_waiter
-	      - 连接已关闭, 不能等待, 引发异常
-	      - 非暂停状态, 不用等待, 直接返回
-	      - 非关闭+暂停状态, await self._drain_waiter
-	      """
+    async def _drain_helper(self):
+        """等待self._drain_waiter
+        - 连接已关闭, 不能等待, 引发异常
+        - 非暂停状态, 不用等待, 直接返回
+        - 非关闭+暂停状态, await self._drain_waiter
+        """
         if self._connection_lost:
             raise ConnectionResetError('Connection lost')
         if not self._paused:
@@ -375,7 +374,7 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
 
     def connection_made(self, transport):
         if self._reject_connection:
-            ...	 	# handle_exception, tranport.abort()
+            ...         # handle_exception, tranport.abort()
             return
           
         self._transport = transport
@@ -384,13 +383,13 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
             reader.set_transport(transport)
             
         self._over_ssl = transport.get_extra_info('sslcontext') is not None
-				
+                
         # 仅对于create_server()模式建立_stream_writer, 执行回调
         if self._client_connected_cb is not None:
-          	...
+              ...
 
     def connection_lost(self, exc):
-      	# 为StreamReader调用 feed_eof() / set_exception() 表示传输终止
+        # 为StreamReader调用 feed_eof() / set_exception() 表示传输终止
         reader = self._stream_reader
         if reader is not None:
             if exc is None:
@@ -398,7 +397,7 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
             else:
                 reader.set_exception(exc)
 
-				if not self._closed.done():
+                if not self._closed.done():
             if exc is None:
                 self._closed.set_result(None)
             else:
@@ -456,11 +455,11 @@ class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
 
 ```python
 class StreamReader:
-  	def set_transport(self, transport):
+    def set_transport(self, transport):
         """记录transport, 仅一次"""
     
     def set_exception(self, exc):
-      	"""记录exception, 唤醒waiter"""
+        """记录exception, 唤醒waiter"""
         self._exception = exc
 
         waiter = self._waiter
@@ -468,27 +467,27 @@ class StreamReader:
             self._waiter = None
             if not waiter.cancelled():
                 waiter.set_exception(exc)
-		
+        
     def feed_eof(self):
-      	"""记录eof标识位, 唤醒waiter"""
+        """记录eof标识位, 唤醒waiter"""
         self._eof = True
         self._wakeup_waiter()
-  	
+      
     def feed_data(self, data: bytes):
-      	"""收到eof标识位后不再继续接收"""
+        """收到eof标识位后不再继续接收"""
         assert not self._eof, 'feed_data after feed_eof'
 
         if not data:
             return
-				
+                
         """向buffer增加数据, 唤醒waiter"""
         self._buffer.extend(data)
         self._wakeup_waiter()
-				
-       	"""asyncio.ReadTransport读入控制条件"""
+                
+        """asyncio.ReadTransport读入控制条件"""
         if (self._transport is not None and 
-            		not self._paused and 
-            		len(self._buffer) > 2 * self._limit):
+                    not self._paused and 
+                    len(self._buffer) > 2 * self._limit):
             try:
                 self._transport.pause_reading()
             except NotImplementedError:
@@ -497,7 +496,7 @@ class StreamReader:
             else:
                 self._paused = True
                 
-		def at_eof(self):
+    def at_eof(self):
         """收到eof标识位, 同时没有缓存数据"""
         return self._eof and not self._buffer
 
@@ -518,32 +517,32 @@ class StreamReader:
 
 ```python
 class StreamReader:
-		async def readline(self):
-      	"""对readunitl('\n')的封装
-      	1) 部分读可能 -> 返回部分读到的数据
-      	2) 超缓存容量时 -> 清除+丢弃缓存部分, _maybe_resume_transport()
-      	"""
+    async def readline(self):
+        """对readunitl('\n')的封装
+        1) 部分读可能 -> 返回部分读到的数据
+        2) 超缓存容量时 -> 清除+丢弃缓存部分, _maybe_resume_transport()
+        """
       
     async def readuntil(self, separator=b'\n'):
-      	""" 读至separator, 正常情况下data与separator会从缓冲区buffer中移除
-      	
-      	检查 len(separator)>0
-      	检查 若有self._exception, 则向上引发
-      	可能引发IncompleteReadError, LimitOverrunError, 超限异常时数据仍在buffer中
-      	"""
+        """ 读至separator, 正常情况下data与separator会从缓冲区buffer中移除
+        
+        检查 len(separator)>0
+        检查 若有self._exception, 则向上引发
+        可能引发IncompleteReadError, LimitOverrunError, 超限异常时数据仍在buffer中
+        """
       
     async def read(self, n=-1):  
-      	"""读入n个bytes"""
+        """读入n个bytes"""
       
     async def readexactly(self, n):
-      	"""
-      	1) EOF, len(buffer)<n -> 清除buffer, IncompleteReadError
-      	2) len(buffer) < n -> 继续等待数据
-      	3) len(buffer) ==n -> data=bytes(buffer)复制, buffer.clear()
-      	4) len(buffer) > n -> data=bytes(buffer[:n]), del buffer[:n]
-      	
-      	检查读入transport状态. _maybe_resume_transport
-      	"""
+        """
+        1) EOF, len(buffer)<n -> 清除buffer, IncompleteReadError
+        2) len(buffer) < n -> 继续等待数据
+        3) len(buffer) ==n -> data=bytes(buffer)复制, buffer.clear()
+        4) len(buffer) > n -> data=bytes(buffer[:n]), del buffer[:n]
+        
+        检查读入transport状态. _maybe_resume_transport
+        """
       
 ```
 
@@ -559,7 +558,6 @@ class StreamReader:
 - `set_write_buffer_limits(high, low)`
 
 
-
 - `write(data)` <- StreamWriter `write(data)`
 - `writelines(list_of_data)` <- StreamWriter `writelines()`
 - `can_write_eof()` <- StreamWriter `can_write_eof()`
@@ -569,10 +567,10 @@ class StreamReader:
 
 ```python
 class StreamWriter:
-		async def wait_closed(self):
+    async def wait_closed(self):
         """StreamReaderPotocol在响应connection_lost()时, 将Future类型的_closed变量设置为完成"""
         await self._protocol._get_close_waiter(self)
-		
+        
     async def drain(self):
         """reader的异常在writer的方法中引发？
         因为StreamReaderProtocol仅在connection_lost()时可能设置异常状态"""
